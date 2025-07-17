@@ -1,0 +1,303 @@
+
+
+{% extends "base.html" %}
+
+{% block content %}
+    <!-- Dark mode toggle -->
+    <div class="dark-mode-toggle" id="darkModeToggle">
+        <div class="toggle-icon sun-icon">☀️</div>
+        <div class="toggle-icon moon-icon">🌙</div>
+    </div>
+    
+    <!-- Home button -->
+    <button class="home-button" id="homeButton" title="Return to Toledo center">🏠</button>
+    
+    <div id="map"></div>
+{% endblock %}
+
+{% block scripts %}
+    <script>
+        // Toledo coordinates
+        const TOLEDO_LAT = 41.6528;
+        const TOLEDO_LON = -83.5379;
+        const TOLEDO_ZOOM = 10;
+        
+        // Initialize map
+        const map = L.map('map').setView([TOLEDO_LAT, TOLEDO_LON], TOLEDO_ZOOM);
+        
+        // Define base layers
+        const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd'
+        });
+        
+        const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd'
+        });
+        
+        // Add default light layer
+        lightLayer.addTo(map);
+        
+        // Track dark mode state
+        let isDarkMode = false;
+        
+        // Road type colors
+        const roadColors = {
+            'motorway': '#FF6B6B',
+            'trunk': '#4ECDC4',
+            'primary': '#45B7D1',
+            'secondary': '#96CEB4'
+        };
+        
+        const roadWeights = {
+            'motorway': 6,
+            'trunk': 5,
+            'primary': 4,
+            'secondary': 3
+        };
+        
+        const roadNames = {
+            'motorway': 'Motorway',
+            'trunk': 'Trunk Roads',
+            'primary': 'Primary Roads',
+            'secondary': 'Secondary Roads'
+        };
+        
+        // Road layer groups
+        const roadLayers = {};
+        const layerVisibility = {
+            'motorway': true,
+            'trunk': true,
+            'primary': true,
+            'secondary': true
+        };
+        
+        // Dark mode toggle functionality
+        const darkModeToggle = document.getElementById('darkModeToggle');
+        darkModeToggle.addEventListener('click', function() {
+            isDarkMode = !isDarkMode;
+            
+            if (isDarkMode) {
+                map.removeLayer(lightLayer);
+                map.addLayer(darkLayer);
+                document.body.classList.add('dark-mode');
+            } else {
+                map.removeLayer(darkLayer);
+                map.addLayer(lightLayer);
+                document.body.classList.remove('dark-mode');
+            }
+        });
+        
+        // Home button functionality
+        const homeButton = document.getElementById('homeButton');
+        homeButton.addEventListener('click', function() {
+            map.setView([TOLEDO_LAT, TOLEDO_LON], TOLEDO_ZOOM);
+        });
+        
+        // Add geocoder (search)
+        const geocoder = L.Control.geocoder({
+            defaultMarkGeocode: false,
+            placeholder: 'Search Toledo locations...',
+            errorMessage: 'Location not found',
+            geocoder: L.Control.Geocoder.nominatim({
+                serviceUrl: 'https://nominatim.openstreetmap.org/',
+                htmlTemplate: function(r) {
+                    return r.name;
+                }
+            })
+        }).on('markgeocode', function(e) {
+            const bbox = e.geocode.bbox;
+            const poly = L.polygon([
+                [bbox.getSouthWest().lat, bbox.getSouthWest().lng],
+                [bbox.getNorthEast().lat, bbox.getSouthWest().lng],
+                [bbox.getNorthEast().lat, bbox.getNorthEast().lng],
+                [bbox.getSouthWest().lat, bbox.getNorthEast().lng]
+            ]);
+            map.fitBounds(poly.getBounds());
+            
+            // Add marker at search result
+            L.marker([e.geocode.center.lat, e.geocode.center.lng])
+                .addTo(map)
+                .bindPopup(e.geocode.name)
+                .openPopup();
+        }).addTo(map);
+        
+        // Style function for roads
+        function styleFeature(feature) {
+            const roadType = feature.properties.highway || 'secondary';
+            return {
+                color: roadColors[roadType] || roadColors['secondary'],
+                weight: roadWeights[roadType] || roadWeights['secondary'],
+                opacity: 0.8
+            };
+        }
+        
+        // Function to add popup to each feature
+        function onEachFeature(feature, layer) {
+            if (feature.properties) {
+                const props = feature.properties;
+                let name = props.name || 'Unnamed Road';
+                
+                // Add ref value if exists
+                if (props.ref) {
+                    name += `\n${props.ref}`;
+                }
+                
+                const roadType = props.highway || 'unknown';
+                const popupContent = `
+                    <strong>${name}</strong><br>
+                    Type: ${roadType.charAt(0).toUpperCase() + roadType.slice(1)}<br>
+                    ${props.osm_id ? `OSM ID: ${props.osm_id}` : ''}
+                `;
+                layer.bindPopup(popupContent);
+            }
+        }
+        
+        // Function to toggle layer visibility
+        function toggleLayer(roadType) {
+            layerVisibility[roadType] = !layerVisibility[roadType];
+            
+            if (layerVisibility[roadType]) {
+                if (roadLayers[roadType]) {
+                    map.addLayer(roadLayers[roadType]);
+                }
+            } else {
+                if (roadLayers[roadType]) {
+                    map.removeLayer(roadLayers[roadType]);
+                }
+            }
+            
+            // Update legend item appearance
+            const legendItem = document.querySelector(`[data-road-type="${roadType}"]`);
+            const checkbox = legendItem.querySelector('.legend-checkbox');
+            
+            if (layerVisibility[roadType]) {
+                legendItem.classList.remove('disabled');
+                checkbox.checked = true;
+            } else {
+                legendItem.classList.add('disabled');
+                checkbox.checked = false;
+            }
+        }
+        
+        // Load and display road data
+        fetch('/data')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Loaded', data.features.length, 'road features');
+                
+                // Group features by road type
+                const featuresByType = {
+                    'motorway': [],
+                    'trunk': [],
+                    'primary': [],
+                    'secondary': []
+                };
+                
+                data.features.forEach(feature => {
+                    const roadType = feature.properties.highway || 'secondary';
+                    if (featuresByType[roadType]) {
+                        featuresByType[roadType].push(feature);
+                    }
+                });
+                
+                // Create layer groups for each road type
+                Object.keys(featuresByType).forEach(roadType => {
+                    if (featuresByType[roadType].length > 0) {
+                        roadLayers[roadType] = L.geoJSON({
+                            type: 'FeatureCollection',
+                            features: featuresByType[roadType]
+                        }, {
+                            style: styleFeature,
+                            onEachFeature: onEachFeature
+                        });
+                        
+                        if (layerVisibility[roadType]) {
+                            roadLayers[roadType].addTo(map);
+                        }
+                    }
+                });
+                
+                // Fit map to data bounds if data exists
+                if (data.features.length > 0) {
+                    try {
+                        const allLayers = Object.values(roadLayers).filter(layer => layer);
+                        if (allLayers.length > 0) {
+                            const group = new L.featureGroup(allLayers);
+                            map.fitBounds(group.getBounds(), {padding: [20, 20]});
+                        }
+                    } catch (e) {
+                        console.warn('Could not fit bounds to data');
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error loading road data:', error);
+                // Show user-friendly message
+                L.popup()
+                    .setLatLng([TOLEDO_LAT, TOLEDO_LON])
+                    .setContent('Unable to load road data. The map will show the base layer only.')
+                    .openOn(map);
+            });
+        
+        // Add collapsible legend with layer controls
+        const legend = L.control({position: 'topright'});
+        legend.onAdd = function(map) {
+            const div = L.DomUtil.create('div', 'legend');
+            div.innerHTML = `
+                <div class="legend-header" onclick="toggleLegend()">
+                    <h4>Road Types</h4>
+                    <button class="legend-toggle" id="legendToggle">▼</button>
+                </div>
+                <div class="legend-content" id="legendContent">
+                    <div class="legend-item" data-road-type="motorway" onclick="toggleLayer('motorway')">
+                        <input type="checkbox" class="legend-checkbox" checked>
+                        <div class="legend-color" style="background-color: ${roadColors.motorway}"></div>
+                        ${roadNames.motorway}
+                    </div>
+                    <div class="legend-item" data-road-type="trunk" onclick="toggleLayer('trunk')">
+                        <input type="checkbox" class="legend-checkbox" checked>
+                        <div class="legend-color" style="background-color: ${roadColors.trunk}"></div>
+                        ${roadNames.trunk}
+                    </div>
+                    <div class="legend-item" data-road-type="primary" onclick="toggleLayer('primary')">
+                        <input type="checkbox" class="legend-checkbox" checked>
+                        <div class="legend-color" style="background-color: ${roadColors.primary}"></div>
+                        ${roadNames.primary}
+                    </div>
+                    <div class="legend-item" data-road-type="secondary" onclick="toggleLayer('secondary')">
+                        <input type="checkbox" class="legend-checkbox" checked>
+                        <div class="legend-color" style="background-color: ${roadColors.secondary}"></div>
+                        ${roadNames.secondary}
+                    </div>
+                </div>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+        
+        // Legend collapse/expand functionality
+        let legendCollapsed = false;
+        
+        function toggleLegend() {
+            const legendContent = document.getElementById('legendContent');
+            const legendToggle = document.getElementById('legendToggle');
+            
+            legendCollapsed = !legendCollapsed;
+            
+            if (legendCollapsed) {
+                legendContent.classList.add('collapsed');
+                legendToggle.textContent = '▶';
+            } else {
+                legendContent.classList.remove('collapsed');
+                legendToggle.textContent = '▼';
+            }
+        }
+        
+        // Add scale control
+        L.control.scale().addTo(map);
+        
+        console.log('Toledo Roads Visualizer loaded successfully');
+    </script>
+{% endblock %}

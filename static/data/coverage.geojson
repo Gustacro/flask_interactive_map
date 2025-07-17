@@ -1,0 +1,55 @@
+
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sample Road 1",
+        "highway": "primary",
+        "osm_id": "sample_1"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-83.5379, 41.6528],
+          [-83.5300, 41.6600],
+          [-83.5200, 41.6700]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sample Road 2",
+        "highway": "secondary",
+        "osm_id": "sample_2"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-83.5500, 41.6400],
+          [-83.5400, 41.6500],
+          [-83.5300, 41.6600]
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sample Motorway",
+        "highway": "motorway",
+        "osm_id": "sample_3"
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [-83.6000, 41.6200],
+          [-83.5800, 41.6400],
+          [-83.5600, 41.6600],
+          [-83.5400, 41.6800]
+        ]
+      }
+    }
+  ]
+}
