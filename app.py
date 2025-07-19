@@ -73,7 +73,7 @@ def get_data():
 
         # Fallback to static file if database is empty
         print("Database returned no roads, falling back to static file")
-        static_file_path = os.path.join('static', 'data', 'toledo_roads.geojson')
+        static_file_path = os.path.join('static', 'data', 'coverage.geojson')
         if os.path.exists(static_file_path):
             with open(static_file_path, 'r') as f:
                 data = json.load(f)
